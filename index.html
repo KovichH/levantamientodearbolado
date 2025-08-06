@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Levantamiento Inventario de Arbolado</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            height: 85vh;
+            position: relative;
+        }
+        #controls {
+            display: flex;
+            padding: 10px;
+            background-color: #f0f0f0;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        #controls button {
+            padding: 12px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+        }
+        #controls button:active {
+            transform: scale(0.95);
+        }
+        #addTreeBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #exportBtn {
+            background-color: #2196F3;
+            color: white;
+        }
+        #locationBtn {
+            background-color: #9C27B0;
+            color: white;
+        }
+        #statsPanel {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-left: auto;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        #treeList {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-content input, 
+        .modal-content textarea,
+        .modal-content select {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .modal-content label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .button-group button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #saveTreeBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #cancelBtn {
+            background-color: #f44336;
+            color: white;
+        }
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            display: none;
+            z-index: 1100;
+            font-size: 14px;
+            max-width: 90%;
+            text-align: center;
+        }
+        #mapCoordinates {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: white;
+            padding: 8px;
+            border-radius: 5px;
+            z-index: 1000;
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #gpsStatus {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            z-index: 1000;
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .gps-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .gps-good {
+            background-color: #4CAF50;
+        }
+        .gps-medium {
+            background-color: #FF9800;
+        }
+        .gps-poor {
+            background-color: #f44336;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .help-text {
+            font-size: 11px;
+            color: #666;
+            margin-top: -5px;
+            margin-bottom: 10px;
+        }
+        @media (max-width: 768px) {
+            #controls {
+                padding: 8px;
+            }
+            #controls button {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+            #statsPanel {
+                width: 100%;
+                justify-content: space-around;
+                margin-left: 0;
+                margin-top: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="addTreeBtn">
+            <span class="material-icons">park</span>
+            Añadir Árbol
+        </button>
+        <button id="exportBtn">
+            <span class="material-icons">download</span>
+            Exportar CSV
+        </button>
+        <button id="locationBtn">
+            <span class="material-icons">my_location</span>
+            Mi Ubicación
+        </button>
+        <div id="statsPanel">
+            <div class="stat-item">
+                <span class="stat-value" id="totalTrees">0</span>
+                <span class="stat-label">Árboles</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="totalSpecies">0</span>
+                <span class="stat-label">Especies</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="totalSpaces">0</span>
+                <span class="stat-label">Espacios</span>
+            </div>
+        </div>
+    </div>
+    <div id="map">
+        <div id="gpsStatus">
+            <div class="gps-indicator"></div>
+            <span id="gpsText">GPS: --</span>
+        </div>
+    </div>
+    <div id="mapCoordinates">Lat: - | Lng: - | Precisión: -</div>
+    <div id="treeList"></div>
+    <div id="toast"></div>
+
+    <!-- Librerías externas -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <script>
+        // Lista de especies comunes en México (Guadalajara)
+        const COMMON_SPECIES = [
+            'Aguacate',
+            'Ahuehuete',
+            'Algodon',
+            'Arrayan',
+            'Atmosferica',
+            'Bolitario',
+            'Camichin',
+            'Caoba',
+            'Capulin',
+            'Casuarina',
+            'Cicua',
+            'Ciruelo',
+            'Clavellina',
+            'Colorin',
+            'Copal',
+            'Copal Chino',
+            'Cuachalalate',
+            'Eucalipto',
+            'Ficus',
+            'Ficus Pringlei',
+            'Fresno',
+            'Galeana',
+            'Granado',
+            'Granjeno',
+            'Guacima',
+            'Guaje Blanco',
+            'Guaje Colorado',
+            'Guamuchil',
+            'Guanabana',
+            'Guayabo',
+            'Guayabo Fresa',
+            'Higuera Blanca',
+            'Higuera Negra',
+            'Hueso de Fraile',
+            'Jacalosuchil',
+            'Jacaranda',
+            'Laurel de la India',
+            'Limon',
+            'Lluvia de Oro',
+            'Magnolia',
+            'Majagua',
+            'Mandarina',
+            'Mango',
+            'Mezquite',
+            'Naranjo Agrio',
+            'Nogal',
+            'Ocotillo',
+            'Olivo Negro',
+            'Ozote',
+            'Palo Dulce',
+            'Palo Fierro',
+            'Papelillo',
+            'Papelillo Hojas Grandes',
+            'Paraiso',
+            'Parota',
+            'Pino Azul',
+            'Pino Michoacano',
+            'Pistacho',
+            'Pistacho Mexicano',
+            'Pochote',
+            'Primavera',
+            'Retama',
+            'Roble',
+            'Rosa Morada',
+            'San Jose de la Montana',
+            'Sauce Blanco',
+            'Sauce Criollo',
+            'Sauce Lloron',
+            'Tabachin',
+            'Tabachin Enano',
+            'Tepame',
+            'Tepeguaje',
+            'Tepemezquite',
+            'Tepezapote',
+            'Zalate',
+            'Zapote Blanco',
+            'Zapote Negro',
+        ];
+
+        // Base de datos local con respaldo automático
+        class TreeDatabase {
+            constructor() {
+                this.trees = JSON.parse(localStorage.getItem('levantamiento_arbolado') || '[]');
+                this.backupKey = 'levantamiento_arbolado_backup';
+                this.sessionKey = 'levantamiento_session_' + new Date().toISOString().split('T')[0];
+                
+                // Recuperar datos de sesión si existen
+                this.recoverSession();
+                
+                // NO limpiar automáticamente - dejar que el usuario decida
+                // this.cleanExpiredTrees();
+                
+                // Verificar integridad de datos
+                this.verifyDataIntegrity();
+            }
+
+            recoverSession() {
+                // Intentar recuperar datos de la sesión actual
+                const sessionData = localStorage.getItem(this.sessionKey);
+                if (sessionData) {
+                    try {
+                        const sessionTrees = JSON.parse(sessionData);
+                        // Combinar con datos existentes evitando duplicados
+                        const existingIds = new Set(this.trees.map(t => t.id));
+                        sessionTrees.forEach(tree => {
+                            if (!existingIds.has(tree.id)) {
+                                this.trees.push(tree);
+                            }
+                        });
+                    } catch(e) {
+                        console.error('Error recuperando sesión:', e);
+                    }
+                }
+            }
+
+            verifyDataIntegrity() {
+                // Verificar que los datos sean válidos
+                if (!Array.isArray(this.trees)) {
+                    console.error('Datos corruptos detectados, recuperando backup...');
+                    this.recoverFromBackup();
+                }
+                
+                // Crear backup automático si hay datos
+                if (this.trees.length > 0) {
+                    this.createBackup();
+                }
+            }
+
+            createBackup() {
+                try {
+                    localStorage.setItem(this.backupKey, JSON.stringify(this.trees));
+                    localStorage.setItem(this.sessionKey, JSON.stringify(this.trees));
+                } catch(e) {
+                    console.error('Error creando backup:', e);
+                }
+            }
+
+            recoverFromBackup() {
+                const backup = localStorage.getItem(this.backupKey);
+                if (backup) {
+                    try {
+                        this.trees = JSON.parse(backup);
+                        console.log('Datos recuperados del backup');
+                    } catch(e) {
+                        console.error('Backup corrupto:', e);
+                        this.trees = [];
+                    }
+                } else {
+                    this.trees = [];
+                }
+            }
+
+            cleanExpiredTrees() {
+                // Método manual para limpiar datos antiguos (no automático)
+                const now = new Date();
+                const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000);
+                
+                const oldCount = this.trees.length;
+                this.trees = this.trees.filter(tree => {
+                    const treeDate = new Date(tree.timestamp);
+                    return treeDate > eightHoursAgo;
+                });
+                
+                const deleted = oldCount - this.trees.length;
+                if (deleted > 0) {
+                    this.save();
+                    return deleted;
+                }
+                return 0;
+            }
+
+            addTree(treeData) {
+                const newTree = {
+                    ...treeData,
+                    id: Date.now().toString(),
+                    timestamp: new Date().toISOString()
+                };
+                this.trees.push(newTree);
+                
+                // Guardar con manejo de errores
+                const saved = this.save();
+                if (!saved) {
+                    // Si falla el guardado principal, al menos intentar backup
+                    this.createBackup();
+                }
+                
+                return newTree;
+            }
+
+            getAllTrees() {
+                return this.trees;
+            }
+
+            deleteTree(id) {
+                this.trees = this.trees.filter(tree => tree.id !== id);
+                this.save();
+            }
+
+            save() {
+                try {
+                    localStorage.setItem('levantamiento_arbolado', JSON.stringify(this.trees));
+                    // También actualizar backup
+                    this.createBackup();
+                    return true;
+                } catch(e) {
+                    if (e.name === 'QuotaExceededError') {
+                        console.error('Almacenamiento lleno. Necesita exportar datos.');
+                        alert('⚠️ Almacenamiento casi lleno. Por favor exporta los datos pronto.');
+                    } else {
+                        console.error('Error guardando:', e);
+                    }
+                    return false;
+                }
+            }
+
+            getStorageInfo() {
+                const dataSize = new Blob([JSON.stringify(this.trees)]).size;
+                const dataSizeKB = (dataSize / 1024).toFixed(2);
+                const estimatedMax = 5 * 1024 * 1024; // 5MB estimado
+                const percentageUsed = ((dataSize / estimatedMax) * 100).toFixed(1);
+                
+                return {
+                    entries: this.trees.length,
+                    sizeKB: dataSizeKB,
+                    percentageUsed: percentageUsed,
+                    canStore: dataSize < estimatedMax * 0.9 // Alertar al 90%
+                };
+            }
+
+            exportToCSV() {
+                // Preparar datos con headers personalizados
+                const exportData = this.trees.map(tree => ({
+                    'ID': tree.id,
+                    'Fecha_Hora': tree.timestamp,
+                    'Latitud': tree.lat,
+                    'Longitud': tree.lng,
+                    'Especie': tree.especie,
+                    'Cantidad': tree.cantidad || 1,
+                    'Espacio_Disponible': tree.espacioDisponible || '',
+                    'Porte': tree.porte || '',
+                    'Notas': tree.notas || '',
+                    'Precision_GPS_(m)': tree.precision ? tree.precision.toFixed(1) : ''
+                }));
+                
+                return Papa.unparse(exportData);
+            }
+
+            getStats() {
+                const species = new Set(this.trees.map(t => t.especie));
+                const totalTrees = this.trees.reduce((sum, tree) => sum + (tree.cantidad || 1), 0);
+                const totalSpaces = this.trees.reduce((sum, tree) => sum + (tree.espacioDisponible || 0), 0);
+                
+                return {
+                    totalTrees,
+                    totalSpecies: species.size,
+                    totalSpaces
+                };
+            }
+        }
+
+        // Inicialización de componentes
+        class TreeInventoryApp {
+            constructor() {
+                this.db = new TreeDatabase();
+                this.map = null;
+                this.markers = [];
+                this.currentLocation = null;
+                this.gpsAccuracy = null;
+                this.watchId = null;
+
+                this.initMap();
+                this.bindEvents();
+                this.renderTreeList();
+                this.updateStats();
+                this.startLocationTracking();
+                this.checkStorageStatus();
+                
+                // Auto-guardar cada 30 segundos
+                setInterval(() => {
+                    this.db.createBackup();
+                    this.checkStorageStatus();
+                }, 30000);
+            }
+
+            checkStorageStatus() {
+                const info = this.db.getStorageInfo();
+                
+                // Actualizar estadísticas con info de almacenamiento
+                const statsPanel = document.getElementById('statsPanel');
+                let storageIndicator = document.getElementById('storageIndicator');
+                
+                if (!storageIndicator) {
+                    storageIndicator = document.createElement('div');
+                    storageIndicator.id = 'storageIndicator';
+                    storageIndicator.className = 'stat-item';
+                    statsPanel.appendChild(storageIndicator);
+                }
+                
+                let statusColor = '#4CAF50';
+                let statusText = 'OK';
+                
+                if (parseFloat(info.percentageUsed) > 90) {
+                    statusColor = '#f44336';
+                    statusText = 'LLENO';
+                    this.showToast('⚠️ Almacenamiento al ' + info.percentageUsed + '% - Exporta pronto');
+                } else if (parseFloat(info.percentageUsed) > 70) {
+                    statusColor = '#FF9800';
+                    statusText = 'ALTO';
+                }
+                
+                storageIndicator.innerHTML = `
+                    <span class="stat-value" style="color: ${statusColor}; font-size: 16px;">${info.percentageUsed}%</span>
+                    <span class="stat-label">Memoria</span>
+                `;
+            }
+
+            initMap() {
+                // Inicializar mapa (ubicación por defecto Guadalajara)
+                this.map = L.map('map').setView([20.6597, -103.3496], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+
+                // Añadir marcadores existentes
+                this.db.getAllTrees().forEach(tree => this.addMarker(tree));
+
+                // Evento de movimiento del mapa para mostrar coordenadas
+                this.map.on('move', () => {
+                    const center = this.map.getCenter();
+                    const coordsText = `Lat: ${center.lat.toFixed(5)} | Lng: ${center.lng.toFixed(5)}`;
+                    const accuracyText = this.gpsAccuracy ? ` | Precisión: ${this.gpsAccuracy.toFixed(0)}m` : '';
+                    document.getElementById('mapCoordinates').textContent = coordsText + accuracyText;
+                });
+            }
+
+            bindEvents() {
+                document.getElementById('addTreeBtn').addEventListener('click', () => this.showAddTreeModal());
+                document.getElementById('exportBtn').addEventListener('click', () => this.exportData());
+                document.getElementById('locationBtn').addEventListener('click', () => this.centerLocation());
+
+                // Atajos de teclado
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                    
+                    switch(e.key.toLowerCase()) {
+                        case ' ':
+                            e.preventDefault();
+                            this.centerLocation();
+                            break;
+                        case 'a':
+                            this.showAddTreeModal();
+                            break;
+                        case 'e':
+                            this.exportData();
+                            break;
+                    }
+                });
+
+                // Detectar estado de conexión
+                window.addEventListener('online', () => {
+                    this.showToast('✅ Conexión restaurada');
+                    // Sincronizar backup al reconectar
+                    this.db.createBackup();
+                });
+                window.addEventListener('offline', () => {
+                    this.showToast('📵 Modo Offline - Todo funciona normal');
+                });
+                
+                // Guardar antes de cerrar/recargar página
+                window.addEventListener('beforeunload', (e) => {
+                    this.db.createBackup();
+                    
+                    // Advertir si hay datos sin exportar
+                    if (this.db.getAllTrees().length > 50) {
+                        e.preventDefault();
+                        e.returnValue = '¿Seguro? Tienes muchos datos sin exportar';
+                        return '¿Seguro? Tienes muchos datos sin exportar';
+                    }
+                });
+                
+                // Detectar cuando la app pierde foco (cambio de pestaña)
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        // Guardar cuando se minimiza o cambia de app
+                        this.db.createBackup();
+                    }
+                });
+            }
+
+            startLocationTracking() {
+                if ("geolocation" in navigator) {
+                    // Configuración optimizada para mejor precisión
+                    const options = {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 0  // No usar caché, siempre obtener posición fresca
+                    };
+
+                    this.watchId = navigator.geolocation.watchPosition(
+                        (position) => {
+                            this.currentLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            this.gpsAccuracy = position.coords.accuracy;
+                            this.updateGPSStatus();
+                        },
+                        (error) => {
+                            console.error('Error GPS:', error);
+                            this.updateGPSStatus(error);
+                        },
+                        options
+                    );
+
+                    // También obtener posición inicial inmediatamente
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            this.currentLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            this.gpsAccuracy = position.coords.accuracy;
+                            this.updateGPSStatus();
+                            
+                            // Auto-centrar en la primera ubicación obtenida
+                            if (this.currentLocation) {
+                                this.map.setView([this.currentLocation.lat, this.currentLocation.lng], 16);
+                            }
+                        },
+                        null,
+                        options
+                    );
+                }
+            }
+
+            updateGPSStatus(error = null) {
+                const statusElement = document.getElementById('gpsStatus');
+                const textElement = document.getElementById('gpsText');
+                const indicator = statusElement.querySelector('.gps-indicator');
+
+                if (error) {
+                    indicator.className = 'gps-indicator gps-poor';
+                    textElement.textContent = 'GPS: Sin señal';
+                } else if (this.gpsAccuracy) {
+                    const accuracy = Math.round(this.gpsAccuracy);
+                    textElement.textContent = `GPS: ±${accuracy}m`;
+                    
+                    // Cambiar color según precisión
+                    if (accuracy <= 10) {
+                        indicator.className = 'gps-indicator gps-good';
+                    } else if (accuracy <= 25) {
+                        indicator.className = 'gps-indicator gps-medium';
+                    } else {
+                        indicator.className = 'gps-indicator gps-poor';
+                    }
+
+                    // Actualizar coordenadas en tiempo real
+                    const center = this.map.getCenter();
+                    document.getElementById('mapCoordinates').textContent = 
+                        `Lat: ${center.lat.toFixed(5)} | Lng: ${center.lng.toFixed(5)} | Precisión: ${accuracy}m`;
+                }
+            }
+
+            centerLocation() {
+                if (this.currentLocation) {
+                    this.map.setView([this.currentLocation.lat, this.currentLocation.lng], 17);
+                    
+                    // Marcador temporal de ubicación
+                    const marker = L.marker([this.currentLocation.lat, this.currentLocation.lng], {
+                        icon: L.divIcon({
+                            className: 'location-marker',
+                            html: `<div style="background-color: #007bff; width: 15px; height: 15px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,123,255,0.5);"></div>`
+                        })
+                    }).addTo(this.map);
+
+                    setTimeout(() => this.map.removeLayer(marker), 3000);
+                    this.showToast(`📍 Ubicación centrada (±${this.gpsAccuracy.toFixed(0)}m)`);
+                } else {
+                    this.showToast('📍 Obteniendo ubicación GPS...');
+                    
+                    // Intentar obtener ubicación con alta precisión
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            this.gpsAccuracy = position.coords.accuracy;
+                            
+                            this.currentLocation = { lat, lng };
+                            this.map.setView([lat, lng], 17);
+                            this.updateGPSStatus();
+                            this.showToast(`✅ Ubicación encontrada (±${this.gpsAccuracy.toFixed(0)}m)`);
+                        },
+                        (error) => {
+                            let errorMsg = '❌ Error GPS: ';
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMsg += 'Permiso denegado';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMsg += 'Posición no disponible';
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMsg += 'Tiempo agotado';
+                                    break;
+                            }
+                            this.showToast(errorMsg);
+                        },
+                        { 
+                            enableHighAccuracy: true, 
+                            timeout: 10000,
+                            maximumAge: 0
+                        }
+                    );
+                }
+            }
+
+            showAddTreeModal() {
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content">
+                        <h2>🌳 Registrar Árbol</h2>
+                        
+                        <label>Especie: *</label>
+                        <input type="text" id="treeSpecies" list="fullSpeciesList" placeholder="Nombre de la especie" required autofocus>
+                        <datalist id="fullSpeciesList">
+                            ${COMMON_SPECIES.map(s => `<option value="${s}">`).join('')}
+                        </datalist>
+                        
+                        <label>Cantidad de Árboles: *</label>
+                        <input type="number" id="treeCount" min="1" value="1" required>
+                        
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #ddd;">
+                        <p class="help-text">Campos opcionales (dejar vacío si no aplica):</p>
+                        
+                        <label>Espacio disponible para árboles:</label>
+                        <input type="number" id="availableSpace" min="0" placeholder="Número de espacios disponibles">
+                        
+                        <label>Porte de árboles por plantar:</label>
+                        <select id="treeSize">
+                            <option value="">Seleccione el porte</option>
+                            <option value="chico">Chico (< 8m)</option>
+                            <option value="mediano">Mediano (8-15m)</option>
+                            <option value="grande">Grande (> 15m)</option>
+                        </select>
+                        
+                        <label>Notas adicionales:</label>
+                        <textarea id="treeNotes" rows="3" placeholder="Estado, observaciones, etc."></textarea>
+                        
+                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #ddd;">
+                        
+                        <label>Coordenadas (ajustar si es necesario):</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" id="latInput" step="any" placeholder="Latitud" required style="flex: 1;">
+                            <input type="number" id="lngInput" step="any" placeholder="Longitud" required style="flex: 1;">
+                        </div>
+                        <p class="help-text">💡 Las coordenadas se toman automáticamente del centro del mapa</p>
+                        
+                        <div class="button-group">
+                            <button id="saveTreeBtn">✓ Guardar</button>
+                            <button id="cancelBtn">✗ Cancelar</button>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(modal);
+
+                // Focus en el primer campo
+                const speciesInput = document.getElementById('treeSpecies');
+                setTimeout(() => speciesInput.focus(), 100);
+
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                    }
+                });
+
+                // Usar ubicación actual si está disponible, sino el centro del mapa
+                let lat, lng;
+                if (this.currentLocation && this.gpsAccuracy && this.gpsAccuracy < 50) {
+                    // Usar GPS si la precisión es buena
+                    lat = this.currentLocation.lat;
+                    lng = this.currentLocation.lng;
+                } else {
+                    // Usar centro del mapa
+                    const center = this.map.getCenter();
+                    lat = center.lat;
+                    lng = center.lng;
+                }
+                
+                document.getElementById('latInput').value = lat.toFixed(5);
+                document.getElementById('lngInput').value = lng.toFixed(5);
+
+                const saveTree = () => {
+                    const latValue = parseFloat(document.getElementById('latInput').value);
+                    const lngValue = parseFloat(document.getElementById('lngInput').value);
+                    const species = document.getElementById('treeSpecies').value.trim();
+                    const count = parseInt(document.getElementById('treeCount').value);
+                    const availableSpace = document.getElementById('availableSpace').value;
+                    const size = document.getElementById('treeSize').value;
+                    const notes = document.getElementById('treeNotes').value;
+
+                    if (isNaN(latValue) || isNaN(lngValue)) {
+                        this.showToast('⚠️ Coordenadas inválidas');
+                        return;
+                    }
+
+                    // Validar coordenadas dentro de México
+                    if (latValue < 14 || latValue > 33 || lngValue < -118 || lngValue > -86) {
+                        if (!confirm('Las coordenadas parecen estar fuera de México. ¿Continuar?')) {
+                            return;
+                        }
+                    }
+
+                    if (!species) {
+                        this.showToast('⚠️ Debe ingresar una especie');
+                        speciesInput.focus();
+                        return;
+                    }
+
+                    if (isNaN(count) || count < 1) {
+                        this.showToast('⚠️ La cantidad debe ser mayor a 0');
+                        return;
+                    }
+
+                    const newTree = this.db.addTree({
+                        lat: latValue,
+                        lng: lngValue,
+                        especie: species,
+                        cantidad: count,
+                        espacioDisponible: availableSpace ? parseInt(availableSpace) : null,
+                        porte: size || null,
+                        notas: notes,
+                        precision: this.gpsAccuracy
+                    });
+
+                    this.addMarker(newTree);
+                    this.renderTreeList();
+                    this.updateStats();
+                    this.checkStorageStatus();
+                    
+                    // Mostrar confirmación con número de registro
+                    const totalTrees = this.db.getAllTrees().length;
+                    this.showToast(`✅ ${species} registrado (#${totalTrees})`);
+                    document.body.removeChild(modal);
+                };
+
+                document.getElementById('saveTreeBtn').addEventListener('click', saveTree);
+                document.getElementById('cancelBtn').addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+
+                // Enter para guardar (solo si no estás en textarea)
+                modal.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        saveTree();
+                    }
+                });
+            }
+
+            addMarker(tree) {
+                let markerColor = '#4CAF50';
+                if (tree.porte === 'chico') markerColor = '#8BC34A';
+                else if (tree.porte === 'mediano') markerColor = '#4CAF50';
+                else if (tree.porte === 'grande') markerColor = '#2E7D32';
+
+                const marker = L.marker([tree.lat, tree.lng], {
+                    icon: L.divIcon({
+                        className: 'tree-marker',
+                        html: `<div style="background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`
+                    })
+                }).addTo(this.map);
+
+                let popupContent = `<b>🌳 ${tree.especie}</b><br>`;
+                popupContent += `<b>Cantidad:</b> ${tree.cantidad}<br>`;
+                
+                if (tree.espacioDisponible !== null && tree.espacioDisponible !== undefined && tree.espacioDisponible !== '') {
+                    popupContent += `<b>Espacios disponibles:</b> ${tree.espacioDisponible}<br>`;
+                }
+                if (tree.porte) {
+                    popupContent += `<b>Porte:</b> ${tree.porte}<br>`;
+                }
+                if (tree.notas) {
+                    popupContent += `<b>Notas:</b> ${tree.notas}<br>`;
+                }
+                if (tree.precision) {
+                    popupContent += `<small><b>Precisión GPS:</b> ±${tree.precision.toFixed(0)}m</small><br>`;
+                }
+                popupContent += `<small><b>📍</b> ${tree.lat.toFixed(5)}, ${tree.lng.toFixed(5)}</small><br>`;
+                popupContent += `<button onclick="app.deleteTreeConfirm('${tree.id}')" style="margin-top: 5px; background: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">🗑️ Eliminar</button>`;
+
+                marker.bindPopup(popupContent);
+                marker.treeId = tree.id;
+                this.markers.push(marker);
+            }
+
+            deleteTreeConfirm(treeId) {
+                if (confirm('¿Seguro que deseas eliminar este árbol?')) {
+                    this.db.deleteTree(treeId);
+                    
+                    // Remover marcador del mapa
+                    const markerIndex = this.markers.findIndex(m => m.treeId === treeId);
+                    if (markerIndex !== -1) {
+                        this.map.removeLayer(this.markers[markerIndex]);
+                        this.markers.splice(markerIndex, 1);
+                    }
+                    
+                    this.renderTreeList();
+                    this.updateStats();
+                    this.showToast('🗑️ Árbol eliminado');
+                }
+            }
+
+            renderTreeList() {
+                const treeList = document.getElementById('treeList');
+                treeList.innerHTML = '<h3>📋 Árboles Registrados</h3>';
+
+                const trees = this.db.getAllTrees();
+                if (trees.length === 0) {
+                    treeList.innerHTML += '<p style="color: #999;">No hay árboles registrados</p>';
+                    return;
+                }
+
+                // Agrupar por especie para mostrar resumen
+                const speciesCount = {};
+                trees.forEach(tree => {
+                    if (!speciesCount[tree.especie]) {
+                        speciesCount[tree.especie] = 0;
+                    }
+                    speciesCount[tree.especie] += tree.cantidad || 1;
+                });
+
+                // Mostrar resumen por especie
+                const summary = document.createElement('div');
+                summary.style.marginBottom = '10px';
+                summary.style.padding = '10px';
+                summary.style.background = '#f0f8f0';
+                summary.style.borderRadius = '5px';
+                
+                let summaryHTML = '<strong>Resumen por especie:</strong><br>';
+                Object.entries(speciesCount)
+                    .sort((a, b) => b[1] - a[1])
+                    .forEach(([species, count]) => {
+                        summaryHTML += `• ${species}: ${count} árbol${count > 1 ? 'es' : ''}<br>`;
+                    });
+                
+                summary.innerHTML = summaryHTML;
+                treeList.appendChild(summary);
+
+                // Mostrar últimos 5 registros
+                const recentTitle = document.createElement('div');
+                recentTitle.innerHTML = '<strong>Últimos registros:</strong>';
+                recentTitle.style.marginTop = '10px';
+                treeList.appendChild(recentTitle);
+
+                trees.slice(-5).reverse().forEach(tree => {
+                    const treeItem = document.createElement('div');
+                    treeItem.style.marginBottom = '5px';
+                    treeItem.style.padding = '8px';
+                    treeItem.style.background = 'white';
+                    treeItem.style.borderRadius = '5px';
+                    treeItem.style.fontSize = '14px';
+                    
+                    let borderColor = '#4CAF50';
+                    if (tree.porte === 'chico') borderColor = '#8BC34A';
+                    else if (tree.porte === 'mediano') borderColor = '#4CAF50';
+                    else if (tree.porte === 'grande') borderColor = '#2E7D32';
+                    
+                    treeItem.style.borderLeft = `4px solid ${borderColor}`;
+                    
+                    const timestamp = new Date(tree.timestamp);
+                    const timeStr = timestamp.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                    
+                    let itemContent = `<strong>${tree.especie}</strong> (${tree.cantidad})`;
+                    if (tree.porte) itemContent += ` - ${tree.porte}`;
+                    itemContent += `<br><small style="color: #666;">📍 ${tree.lat.toFixed(4)}, ${tree.lng.toFixed(4)} • ${timeStr}</small>`;
+                    
+                    treeItem.innerHTML = itemContent;
+                    treeItem.style.cursor = 'pointer';
+                    treeItem.addEventListener('click', () => {
+                        this.map.setView([tree.lat, tree.lng], 18);
+                        const marker = this.markers.find(m => m.treeId === tree.id);
+                        if (marker) marker.openPopup();
+                    });
+                    
+                    treeList.appendChild(treeItem);
+                });
+            }
+
+            updateStats() {
+                const stats = this.db.getStats();
+                document.getElementById('totalTrees').textContent = stats.totalTrees;
+                document.getElementById('totalSpecies').textContent = stats.totalSpecies;
+                document.getElementById('totalSpaces').textContent = stats.totalSpaces;
+            }
+
+            exportData() {
+                const trees = this.db.getAllTrees();
+                if (trees.length === 0) {
+                    this.showToast('⚠️ No hay datos para exportar');
+                    return;
+                }
+
+                try {
+                    const csvContent = this.db.exportToCSV();
+                    
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    
+                    const now = new Date();
+                    const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+                    link.setAttribute("download", `arbolado_${timestamp}.csv`);
+                    
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    this.showToast(`✅ Exportado: ${trees.length} registros`);
+                    
+                    // Preguntar si desea limpiar después de exportar
+                    setTimeout(() => {
+                        if (confirm(`Datos exportados exitosamente (${trees.length} registros).\n\n¿Deseas limpiar la memoria para empezar un nuevo inventario?\n\n(Los datos exportados están seguros en tu archivo CSV)`)) {
+                            // Limpiar datos pero mantener configuración
+                            this.db.trees = [];
+                            this.db.save();
+                            
+                            // Limpiar marcadores del mapa
+                            this.markers.forEach(marker => this.map.removeLayer(marker));
+                            this.markers = [];
+                            
+                            this.renderTreeList();
+                            this.updateStats();
+                            this.checkStorageStatus();
+                            this.showToast('🧹 Memoria limpiada - Listo para nuevo inventario');
+                        }
+                    }, 500);
+                    
+                } catch(error) {
+                    this.showToast('❌ Error al exportar: ' + error.message);
+                    console.error('Error exportando:', error);
+                }
+            }
+
+            showToast(message) {
+                const toast = document.getElementById('toast');
+                toast.textContent = message;
+                toast.style.display = 'block';
+                
+                clearTimeout(this.toastTimeout);
+                this.toastTimeout = setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // Variable global para acceso desde popups
+        let app;
+
+        // Iniciar aplicación cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new TreeInventoryApp();
+            
+            // Mostrar tip inicial
+            setTimeout(() => {
+                app.showToast('💡 Espera unos segundos para mejor precisión GPS');
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
