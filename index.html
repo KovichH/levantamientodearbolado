@@ -362,6 +362,12 @@
                 this.backupKey = 'levantamiento_arbolado_backup';
                 this.sessionKey = 'levantamiento_session_' + new Date().toISOString().split('T')[0];
                 
+                // Inicializar o recuperar el ID de sesión único
+                this.sessionId = this.getOrCreateSessionId();
+                
+                // Inicializar contador para esta sesión
+                this.counter = this.getLastCounter() + 1;
+                
                 // Recuperar datos de sesión si existen
                 this.recoverSession();
                 
@@ -370,6 +376,44 @@
                 
                 // Verificar integridad de datos
                 this.verifyDataIntegrity();
+            }
+
+            getOrCreateSessionId() {
+                // Obtener o crear un ID único para este dispositivo/sesión
+                let sessionId = localStorage.getItem('device_session_id');
+                if (!sessionId) {
+                    // Generar ID único de 3 caracteres basado en tiempo y random
+                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                    const random = () => chars[Math.floor(Math.random() * chars.length)];
+                    sessionId = random() + random() + random();
+                    localStorage.setItem('device_session_id', sessionId);
+                }
+                return sessionId;
+            }
+
+            getLastCounter() {
+                // Obtener el último contador usado
+                if (this.trees.length === 0) return 0;
+                
+                // Buscar el ID más alto de esta sesión
+                const sessionTrees = this.trees.filter(t => t.id && t.id.startsWith(this.sessionId));
+                if (sessionTrees.length === 0) return 0;
+                
+                const counters = sessionTrees.map(t => {
+                    const parts = t.id.split('-');
+                    return parseInt(parts[1]) || 0;
+                });
+                
+                return Math.max(...counters);
+            }
+
+            generateUniqueId() {
+                // Formato: XXX-00001 (sesión-contador)
+                // Ejemplo: AB7-00001, AB7-00002, etc.
+                const paddedCounter = String(this.counter).padStart(5, '0');
+                const id = `${this.sessionId}-${paddedCounter}`;
+                this.counter++;
+                return id;
             }
 
             recoverSession() {
@@ -396,6 +440,25 @@
                 if (!Array.isArray(this.trees)) {
                     console.error('Datos corruptos detectados, recuperando backup...');
                     this.recoverFromBackup();
+                }
+                
+                // Migrar IDs antiguos si existen (timestamps largos)
+                let needsMigration = false;
+                this.trees = this.trees.map(tree => {
+                    if (tree.id && tree.id.length > 10 && !tree.id.includes('-')) {
+                        needsMigration = true;
+                        // Convertir timestamp viejo a nuevo formato
+                        const oldId = tree.id;
+                        tree.id = this.generateUniqueId();
+                        tree.oldId = oldId; // Guardar referencia al ID anterior
+                        console.log(`Migrado ID: ${oldId} -> ${tree.id}`);
+                    }
+                    return tree;
+                });
+                
+                if (needsMigration) {
+                    this.save();
+                    console.log('IDs migrados al nuevo formato');
                 }
                 
                 // Crear backup automático si hay datos
@@ -450,7 +513,7 @@
             addTree(treeData) {
                 const newTree = {
                     ...treeData,
-                    id: Date.now().toString(),
+                    id: this.generateUniqueId(),
                     timestamp: new Date().toISOString()
                 };
                 this.trees.push(newTree);
@@ -508,7 +571,7 @@
             exportToCSV() {
                 // Preparar datos con headers personalizados
                 const exportData = this.trees.map(tree => ({
-                    'ID': tree.id,
+                    'ID': tree.id || 'SIN-ID',
                     'Fecha_Hora': tree.timestamp,
                     'Latitud': tree.lat,
                     'Longitud': tree.lng,
@@ -917,9 +980,8 @@
                     this.updateStats();
                     this.checkStorageStatus();
                     
-                    // Mostrar confirmación con número de registro
-                    const totalTrees = this.db.getAllTrees().length;
-                    this.showToast(`✅ ${species} registrado (#${totalTrees})`);
+                    // Mostrar confirmación con ID único
+                    this.showToast(`✅ ${species} registrado (${newTree.id})`);
                     document.body.removeChild(modal);
                 };
 
@@ -1142,9 +1204,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             app = new TreeInventoryApp();
             
-            // Mostrar tip inicial
+            // Mostrar tip inicial con ID de sesión
             setTimeout(() => {
-                app.showToast('💡 Espera unos segundos para mejor precisión GPS');
+                app.showToast(`💡 Sesión: ${app.db.sessionId} | Espera unos segundos para mejor GPS`);
             }, 2000);
         });
     </script>
