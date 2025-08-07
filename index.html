@@ -888,14 +888,9 @@
                         <label>Notas adicionales:</label>
                         <textarea id="treeNotes" rows="3" placeholder="Estado, observaciones, etc."></textarea>
                         
-                        <hr style="margin: 15px 0; border: none; border-top: 1px solid #ddd;">
-                        
-                        <label>Coordenadas (ajustar si es necesario):</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="number" id="latInput" step="any" placeholder="Latitud" required style="flex: 1;">
-                            <input type="number" id="lngInput" step="any" placeholder="Longitud" required style="flex: 1;">
-                        </div>
-                        <p class="help-text">💡 Las coordenadas se toman automáticamente del centro del mapa</p>
+                        <!-- Coordenadas ocultas pero funcionales -->
+                        <input type="hidden" id="latInput" step="any" required>
+                        <input type="hidden" id="lngInput" step="any" required>
                         
                         <div class="button-group">
                             <button id="saveTreeBtn">✓ Guardar</button>
