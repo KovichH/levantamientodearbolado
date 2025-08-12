@@ -265,7 +265,7 @@
             <span id="gpsText">GPS: --</span>
         </div>
     </div>
-    <div id="mapCoordinates">Lat: - | Lng: - | Precisión: -</div>
+    <div id="mapCoordinates">UTM: - E, - N | Zona: 13N</div>
     <div id="treeList"></div>
     <div id="toast"></div>
 
@@ -569,12 +569,15 @@
             }
 
             exportToCSV() {
-                // Preparar datos con headers personalizados
+                // Preparar datos con headers personalizados incluyendo UTM
                 const exportData = this.trees.map(tree => ({
                     'ID': tree.id || 'SIN-ID',
                     'Fecha_Hora': tree.timestamp,
                     'Latitud': tree.lat,
                     'Longitud': tree.lng,
+                    'UTM_Easting': tree.utm_easting ? tree.utm_easting.toFixed(2) : '',
+                    'UTM_Northing': tree.utm_northing ? tree.utm_northing.toFixed(2) : '',
+                    'UTM_Zona': tree.utm_zone || '13N',
                     'Especie': tree.especie,
                     'Cantidad': tree.cantidad || 1,
                     'Espacio_Disponible': tree.espacioDisponible || '',
@@ -668,10 +671,89 @@
                 // Evento de movimiento del mapa para mostrar coordenadas
                 this.map.on('move', () => {
                     const center = this.map.getCenter();
-                    const coordsText = `Lat: ${center.lat.toFixed(5)} | Lng: ${center.lng.toFixed(5)}`;
+                    const utm = this.latLngToUTM(center.lat, center.lng);
+                    const coordsText = `UTM: ${utm.easting.toFixed(0)} E, ${utm.northing.toFixed(0)} N | Zona: 13N`;
                     const accuracyText = this.gpsAccuracy ? ` | Precisión: ${this.gpsAccuracy.toFixed(0)}m` : '';
                     document.getElementById('mapCoordinates').textContent = coordsText + accuracyText;
                 });
+            }
+
+            // Función para convertir Lat/Lng a UTM Zona 13N
+            latLngToUTM(lat, lng) {
+                // Constantes para WGS84
+                const a = 6378137.0; // Radio ecuatorial
+                const f = 1/298.257223563; // Achatamiento
+                const k0 = 0.9996; // Factor de escala
+                
+                // Para zona 13N (Guadalajara está en zona 13)
+                const zone = 13;
+                const lonOrigin = (zone - 1) * 6 - 180 + 3; // -105 para zona 13
+                
+                const e = Math.sqrt(2 * f - f * f); // Primera excentricidad
+                const N = a / Math.sqrt(1 - e * e * Math.sin(lat * Math.PI/180) * Math.sin(lat * Math.PI/180));
+                const T = Math.tan(lat * Math.PI/180) * Math.tan(lat * Math.PI/180);
+                const C = e * e * Math.cos(lat * Math.PI/180) * Math.cos(lat * Math.PI/180) / (1 - e * e);
+                const A = (lng - lonOrigin) * Math.PI/180 * Math.cos(lat * Math.PI/180);
+                
+                const M = a * ((1 - e * e/4 - 3 * e * e * e * e/64 - 5 * e * e * e * e * e * e/256) * lat * Math.PI/180
+                    - (3 * e * e/8 + 3 * e * e * e * e/32 + 45 * e * e * e * e * e * e/1024) * Math.sin(2 * lat * Math.PI/180)
+                    + (15 * e * e * e * e/256 + 45 * e * e * e * e * e * e/1024) * Math.sin(4 * lat * Math.PI/180)
+                    - (35 * e * e * e * e * e * e/3072) * Math.sin(6 * lat * Math.PI/180));
+                
+                const easting = k0 * N * (A + (1 - T + C) * A * A * A/6
+                    + (5 - 18 * T + T * T + 72 * C - 58 * e * e) * A * A * A * A * A/120) + 500000.0;
+                
+                const northing = k0 * (M + N * Math.tan(lat * Math.PI/180) * 
+                    (A * A/2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A/24
+                    + (61 - 58 * T + T * T + 600 * C - 330 * e * e) * A * A * A * A * A * A/720));
+                
+                return {
+                    easting: easting,
+                    northing: northing,
+                    zone: zone,
+                    hemisphere: lat >= 0 ? 'N' : 'S'
+                };
+            }
+
+            // Función para convertir UTM a Lat/Lng
+            utmToLatLng(easting, northing, zone = 13, hemisphere = 'N') {
+                // Constantes para WGS84
+                const a = 6378137.0;
+                const f = 1/298.257223563;
+                const k0 = 0.9996;
+                
+                const e = Math.sqrt(2 * f - f * f);
+                const e1sq = e * e / (1 - e * e);
+                
+                const lonOrigin = (zone - 1) * 6 - 180 + 3;
+                
+                const x = easting - 500000.0;
+                const y = hemisphere === 'S' ? northing - 10000000.0 : northing;
+                
+                const M = y / k0;
+                const mu = M / (a * (1 - e * e/4 - 3 * e * e * e * e/64 - 5 * e * e * e * e * e * e/256));
+                
+                const phi1 = mu + (3 * e1sq/2 - 27 * e1sq * e1sq * e1sq/32) * Math.sin(2 * mu)
+                    + (21 * e1sq * e1sq/16 - 55 * e1sq * e1sq * e1sq * e1sq/32) * Math.sin(4 * mu)
+                    + (151 * e1sq * e1sq * e1sq/96) * Math.sin(6 * mu);
+                    
+                const N1 = a / Math.sqrt(1 - e * e * Math.sin(phi1) * Math.sin(phi1));
+                const T1 = Math.tan(phi1) * Math.tan(phi1);
+                const C1 = e * e * Math.cos(phi1) * Math.cos(phi1) / (1 - e * e);
+                const R1 = a * (1 - e * e) / Math.pow(1 - e * e * Math.sin(phi1) * Math.sin(phi1), 1.5);
+                const D = x / (N1 * k0);
+                
+                const lat = phi1 - (N1 * Math.tan(phi1) / R1) * 
+                    (D * D/2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * e * e) * D * D * D * D/24
+                    + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * e * e - 3 * C1 * C1) * D * D * D * D * D * D/720);
+                    
+                const lng = (D - (1 + 2 * T1 + C1) * D * D * D/6 
+                    + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * e * e + 24 * T1 * T1) * D * D * D * D * D/120) / Math.cos(phi1);
+                
+                return {
+                    lat: lat * 180/Math.PI,
+                    lng: lng * 180/Math.PI + lonOrigin
+                };
             }
 
             bindEvents() {
@@ -795,10 +877,11 @@
                         indicator.className = 'gps-indicator gps-poor';
                     }
 
-                    // Actualizar coordenadas en tiempo real
+                    // Actualizar coordenadas UTM en tiempo real
                     const center = this.map.getCenter();
+                    const utm = this.latLngToUTM(center.lat, center.lng);
                     document.getElementById('mapCoordinates').textContent = 
-                        `Lat: ${center.lat.toFixed(5)} | Lng: ${center.lng.toFixed(5)} | Precisión: ${accuracy}m`;
+                        `UTM: ${utm.easting.toFixed(0)} E, ${utm.northing.toFixed(0)} N | Zona: 13N | Precisión: ${accuracy}m`;
                 }
             }
 
@@ -959,9 +1042,15 @@
                         return;
                     }
 
+                    // Calcular coordenadas UTM
+                    const utm = this.latLngToUTM(latValue, lngValue);
+                    
                     const newTree = this.db.addTree({
                         lat: latValue,
                         lng: lngValue,
+                        utm_easting: utm.easting,
+                        utm_northing: utm.northing,
+                        utm_zone: '13N',
                         especie: species,
                         cantidad: count,
                         espacioDisponible: availableSpace ? parseInt(availableSpace) : null,
@@ -1022,6 +1111,15 @@
                 if (tree.precision) {
                     popupContent += `<small><b>Precisión GPS:</b> ±${tree.precision.toFixed(0)}m</small><br>`;
                 }
+                
+                // Mostrar coordenadas UTM si existen, si no, calcularlas
+                if (tree.utm_easting && tree.utm_northing) {
+                    popupContent += `<small><b>UTM:</b> ${tree.utm_easting.toFixed(0)} E, ${tree.utm_northing.toFixed(0)} N</small><br>`;
+                } else {
+                    const utm = this.latLngToUTM(tree.lat, tree.lng);
+                    popupContent += `<small><b>UTM:</b> ${utm.easting.toFixed(0)} E, ${utm.northing.toFixed(0)} N</small><br>`;
+                }
+                
                 popupContent += `<small><b>📍</b> ${tree.lat.toFixed(5)}, ${tree.lng.toFixed(5)}</small><br>`;
                 popupContent += `<button onclick="app.deleteTreeConfirm('${tree.id}')" style="margin-top: 5px; background: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">🗑️ Eliminar</button>`;
 
